@@ -4,6 +4,7 @@ from app.safety.checker import (
     evaluate_intent,
     get_safety_message,
 )
+from app.search.firestore_search import search_firestore
 
 
 async def process_question(request: QuestionRequest) -> CPAResponse:
@@ -20,9 +21,15 @@ async def process_question(request: QuestionRequest) -> CPAResponse:
        ↙      ↘
      YES      NO
       ↓        ↓
-    Search    Blocked Response
+    Firestore   Blocked Response
       ↓
-    Not Found / Success
+    Found?
+    ↙    ↘
+  YES     NO
+   ↓       ↓
+SUCCESS  NOT_FOUND
+   ↓
+Verified Response
     """
 
     question = request.question.strip()
@@ -32,10 +39,6 @@ async def process_question(request: QuestionRequest) -> CPAResponse:
     # --------------------------------------------------
 
     safety_decision = evaluate_intent(question)
-
-    # --------------------------------------------------
-    # STEP 2: BLOCK RESTRICTED INTENTS IMMEDIATELY
-    # --------------------------------------------------
 
     if safety_decision != SafetyDecision.ALLOW:
         return CPAResponse(
@@ -48,8 +51,30 @@ async def process_question(request: QuestionRequest) -> CPAResponse:
         )
 
     # --------------------------------------------------
-    # STEP 3: DETERMINISTIC SEARCH PLACEHOLDER
-    # Firestore will be connected in the next step.
+    # STEP 2: DETERMINISTIC FIRESTORE SEARCH
+    # --------------------------------------------------
+
+    search_result = await search_firestore(question)
+
+    # --------------------------------------------------
+    # STEP 3: VERIFIED INFORMATION FOUND
+    # --------------------------------------------------
+
+    if search_result is not None:
+        return CPAResponse(
+            status="success",
+            source="firestore",
+            answer=search_result.get(
+                "content",
+                "An sami bayanin da ya dace."
+            ),
+            verified=True,
+            message=search_result.get("title"),
+            needs_human=False,
+        )
+
+    # --------------------------------------------------
+    # STEP 4: VERIFIED INFORMATION NOT FOUND
     # --------------------------------------------------
 
     return CPAResponse(
@@ -60,6 +85,9 @@ async def process_question(request: QuestionRequest) -> CPAResponse:
             "a cikin tsarin M-CPA ba."
         ),
         verified=False,
-        message="The requested information was not found in the verified system.",
+        message=(
+            "The requested information was not found in the "
+            "verified knowledge base."
+        ),
         needs_human=False,
     )

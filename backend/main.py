@@ -4,12 +4,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.ai.schemas import QuestionRequest, CPAResponse
 from app.ai.service import process_question
 
-from app.core.firebase import get_firestore_client
-
 
 app = FastAPI(
     title="Med CarePath Assistant API",
-    description="Backend API for M-CPA healthcare navigation and workflow assistance.",
+    description=(
+        "Backend API for healthcare navigation, laboratory workflow, "
+        "and verified healthcare information assistance."
+    ),
     version="0.1.0",
 )
 
@@ -34,7 +35,7 @@ app.add_middleware(
 
 
 # ---------------------------------------------------------
-# HEALTH CHECK
+# API STATUS
 # ---------------------------------------------------------
 
 @app.get("/")
@@ -44,56 +45,36 @@ async def root():
     }
 
 
+# ---------------------------------------------------------
+# HEALTH CHECK
+# ---------------------------------------------------------
+
 @app.get("/health")
 async def health_check():
     return {
         "status": "healthy",
-        "service": "M-CPA API"
+        "service": "M-CPA API",
+        "version": "0.1.0",
     }
 
-@app.get("/firebase-test")
-async def firebase_test():
-    """
-    Temporary endpoint to test the backend connection to Firestore.
-    """
 
-    try:
-        db = get_firestore_client()
-
-        # Simple Firestore operation
-        collections = list(db.collections())
-
-        return {
-            "status": "connected",
-            "message": "Firebase Admin successfully connected to Firestore.",
-            "collections_found": len(collections),
-        }
-
-    except Exception as error:
-        return {
-            "status": "error",
-            "message": str(error),
-        }
 # ---------------------------------------------------------
-# PHASE 1 - AI QUERY ENDPOINT
+# MAIN M-CPA QUERY ENDPOINT
 # ---------------------------------------------------------
 
 @app.post(
     "/api/v1/ai/query",
     response_model=CPAResponse,
 )
-async def query_ai(request: QuestionRequest):
+async def query_ai(request: QuestionRequest) -> CPAResponse:
     """
-    Main Phase 1 entry point for M-CPA questions.
+    Main M-CPA query endpoint.
 
-    Current flow:
-    QuestionRequest
-        ↓
-    Pydantic Validation
-        ↓
-    Service Layer
-        ↓
-    CPAResponse
+    Flow:
+    1. Input validation
+    2. Intent-aware safety evaluation
+    3. Deterministic Firestore search
+    4. Structured response
     """
 
     return await process_question(request)
